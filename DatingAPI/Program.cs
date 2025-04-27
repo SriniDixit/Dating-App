@@ -21,6 +21,7 @@ public class Program
             _builder=>_builder.MigrationsAssembly("DatingAPI")
             )
         );
+        builder.Services.AddCors();
 
         var app = builder.Build();
 
@@ -31,6 +32,9 @@ public class Program
             app.UseSwaggerUI();
         }
 
+        app.UseCors(_policy=>_policy.AllowAnyHeader()
+            .AllowAnyMethod()
+            .WithOrigins("http://localhost:4200"));
         app.UseHttpsRedirection();
 
         app.UseAuthorization();
