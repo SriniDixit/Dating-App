@@ -1,13 +1,14 @@
+using System.Security.Cryptography;
+using System.Text;
 using DatingDAL;
+using DatingModels.Entities;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace DatingAPI.Controllers
 {
-    [Route("api/[controller]")]
-    [ApiController]
-    public class AppUser(DataContext dataContext) : ControllerBase
+    public class AppUser(DataContext dataContext) : BaseController
     {
         private readonly DataContext dataContext = dataContext;
 
@@ -48,7 +49,7 @@ namespace DatingAPI.Controllers
         }
 
         [HttpPost]
-        public async Task<ActionResult<DatingModels.Entities.AppUser>> AddUser(DatingModels.Entities.AppUser user)
+        public async Task<ActionResult<DatingModels.Entities.AppUser>> AddUser([FromBody]DatingModels.Entities.AppUserDTO user)
         {
             try
             {
@@ -57,15 +58,19 @@ namespace DatingAPI.Controllers
                     return BadRequest("User data is null");
                 }
 
-                var existingUser = await dataContext.Users
-                    .FirstOrDefaultAsync(u => u.Id == user.Id);
-                    
-                if (existingUser != null)
-                {
-                    return BadRequest("UserId already exists");
-                }
+              
+                // computing hash
+                using var hmac=new HMACSHA512();
+                var passwordHash= hmac.ComputeHash(Encoding.UTF8.GetBytes(user.Password));
+                var passwordSalt=hmac.Key;
 
-                await dataContext.Users.AddAsync(user);
+                DatingModels.Entities.AppUser appUser=new DatingModels.Entities.AppUser(){
+                    UserName=user.UserName,
+                    PasswordHash=passwordHash,
+                    PasswordSalt=passwordSalt
+                };
+
+                await dataContext.Users.AddAsync(appUser);
                 await dataContext.SaveChangesAsync();
                 return Ok(user);
             }
