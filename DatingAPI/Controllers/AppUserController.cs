@@ -2,13 +2,16 @@ using System.Security.Cryptography;
 using System.Text;
 using DatingDAL;
 using DatingModels.Entities;
+using DatingServices;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace DatingAPI.Controllers
 {
-    public class AppUser(DataContext dataContext) : BaseController
+    [Authorize] // This makes all endpoints in this controller require authorization by default
+    public class AppUser(DataContext dataContext, IUserService userService) : BaseController
     {
         private readonly DataContext dataContext = dataContext;
 
@@ -48,8 +51,9 @@ namespace DatingAPI.Controllers
             }
         }
 
+        [Authorize(Policy ="RequireAdminRole")]
         [HttpPost]
-        public async Task<ActionResult<DatingModels.Entities.AppUser>> AddUser([FromBody]DatingModels.Entities.AppUserDTO user)
+        public async Task<ActionResult<DatingModels.Entities.AppUser>> AddUser([FromBody]DatingModels.DTOs.AppUserDTO user)
         {
             try
             {
@@ -58,20 +62,18 @@ namespace DatingAPI.Controllers
                     return BadRequest("User data is null");
                 }
 
-              
-                // computing hash
-                using var hmac=new HMACSHA512();
-                var passwordHash= hmac.ComputeHash(Encoding.UTF8.GetBytes(user.Password));
-                var passwordSalt=hmac.Key;
+                //check if user exists
+                if(await userService.UserExistsAsync(user))
+                {
+                    return BadRequest("User already exists");
+                }
 
-                DatingModels.Entities.AppUser appUser=new DatingModels.Entities.AppUser(){
-                    UserName=user.UserName,
-                    PasswordHash=passwordHash,
-                    PasswordSalt=passwordSalt
-                };
-
-                await dataContext.Users.AddAsync(appUser);
-                await dataContext.SaveChangesAsync();
+                var result = await userService.AddDataUser(user);
+                if (!result)
+                {
+                    return StatusCode(500, "Failed to create user");
+                }
+                
                 return Ok(user);
             }
             catch (Exception ex)
