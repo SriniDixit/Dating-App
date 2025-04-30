@@ -1,13 +1,17 @@
+using System.Security.Cryptography;
+using System.Text;
 using DatingDAL;
+using DatingModels.Entities;
+using DatingServices;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace DatingAPI.Controllers
 {
-    [Route("api/[controller]")]
-    [ApiController]
-    public class AppUser(DataContext dataContext) : ControllerBase
+    [Authorize] // This makes all endpoints in this controller require authorization by default
+    public class AppUser(DataContext dataContext, IUserService userService) : BaseController
     {
         private readonly DataContext dataContext = dataContext;
 
@@ -47,8 +51,9 @@ namespace DatingAPI.Controllers
             }
         }
 
+        [Authorize(Policy ="RequireAdminRole")]
         [HttpPost]
-        public async Task<ActionResult<DatingModels.Entities.AppUser>> AddUser(DatingModels.Entities.AppUser user)
+        public async Task<ActionResult<DatingModels.Entities.AppUser>> AddUser([FromBody]DatingModels.DTOs.AppUserDTO user)
         {
             try
             {
@@ -57,16 +62,18 @@ namespace DatingAPI.Controllers
                     return BadRequest("User data is null");
                 }
 
-                var existingUser = await dataContext.Users
-                    .FirstOrDefaultAsync(u => u.Id == user.Id);
-                    
-                if (existingUser != null)
+                //check if user exists
+                if(await userService.UserExistsAsync(user))
                 {
-                    return BadRequest("UserId already exists");
+                    return BadRequest("User already exists");
                 }
 
-                await dataContext.Users.AddAsync(user);
-                await dataContext.SaveChangesAsync();
+                var result = await userService.AddDataUser(user);
+                if (!result)
+                {
+                    return StatusCode(500, "Failed to create user");
+                }
+                
                 return Ok(user);
             }
             catch (Exception ex)
